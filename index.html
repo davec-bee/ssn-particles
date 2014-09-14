@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <script src="js/jquery-1.8.3.min.js"></script>
+    <script src="js/pixi.js"></script>
+    <style type="text/css">
+        body { margin: 0; padding: 0;}
+    </style>
+    <script type="text/javascript">
+
+    $(window).resize(resize)
+    window.onorientationchange = resize;
+
+    $(document).ready(start);
+
+    //  Globals, globals everywhere and not a drop to drink
+    var w = 1024;
+    var h = 768;
+    var starCount = 200;
+    var sx = 1.0 + (Math.random() / 20);
+    var sy = sx; //1.0 + (Math.random() / 20);
+    var slideX = w / 2;
+    var slideY = h / 2;
+    var dots = [];
+    var renderer;
+    var stage;
+
+    var speed = 1;
+
+    var interactive = true;
+
+    var maxRadius = 300;
+    var minRadius = 200;
+    var radiusScatter = 50;
+
+    var colors = [0x00B2AC, 0x368FCA, 0x745FAC];
+    //var colors = [0x20bdca, 0x38a59f, 0x5db290, 0x8e9656, 0xb5aa4b, 0xa47d37];
+
+    var highlightedDots;
+
+    function start() {
+        var dot;
+        var ballTexture = new PIXI.Texture.fromImage("img/bubble_32x32.png");
+        renderer = PIXI.autoDetectRenderer(w, h);
+        stage = new PIXI.Stage(0x000000, interactive);
+
+        document.body.appendChild(renderer.view);
+
+        for (var i = 0; i < starCount; i++)
+        {
+            //var tempBall = new PIXI.Sprite(ballTexture);
+
+            var angle = Math.random() * 2 * Math.PI;
+            //var radiusDist = Math.pow(2 * Math.random() - 2, 2);
+            //var radiusDist = Math.pow(2, 2 * Math.random() - 1);
+            //var radiusDist = Math.pow(2 * Math.random() - 1, 2);
+            //var radiusDist = Math.pow(2 * Math.random() - 1, 3);
+           //var radiusDist = Math.pow(Math.random(), 2);
+            var radiusDistX = Math.random();
+            var radiusDist = y = -3.3725 * Math.pow(radiusDistX,3) + 4.2901 * Math.pow(radiusDistX,2) - 0.1322 * radiusDistX + 0.0531;
+
+            var radius = (radiusDist * (maxRadius - minRadius) + minRadius) + (Math.random() - 0.5) * radiusScatter;
+            var tempBall = new PIXI.Graphics();
+            var color = colors[Math.floor(Math.random() * colors.length)];
+            //var alpha = (radius - minRadius) / (maxRadius - minRadius) * 0.5 + 0.5;
+            var alpha = (radius - minRadius) / (maxRadius - minRadius) * 0.9 + 0.1;
+            
+            var isForeground = Math.random() > 0.5;
+
+            var size = (isForeground ? 1.1 : radiusDist) * 3 + 5;
+            alpha = isForeground ? alpha : 1;
+
+            tempBall.beginFill(color, alpha );
+            tempBall.drawCircle(0,0,size);
+            tempBall.endFill;
+
+            tempBall.position.x = (Math.random() * w) - slideX;
+            tempBall.position.y = (Math.random() * h) - slideY;
+            //tempBall.anchor.x = 0.5;
+            //tempBall.anchor.y = 0.5;
+
+            dot = {
+                sprite: tempBall,
+                a: angle,
+                r: radius,
+                c: genConnections(i, starCount),
+                i: i
+            }
+
+            tempBall.interactive = true;
+            tempBall.hitArea = new PIXI.Rectangle(-size,-size,size*2, size*2);
+
+            dots.push(dot);
+
+            tempBall.mouseover = focusDot;
+
+            stage.addChild(tempBall);
+        }
+
+        resize();
+
+        requestAnimFrame(update);
+    }
+
+    function focusDot(eventData) {
+        var dot = findDotBySprite(eventData.target)
+
+        highlightedDots = [dot.i];
+
+        console.log('focusing on ' + dot.i);
+    }
+
+    function resize()
+    {
+        w = $(window).width();
+        h = $(window).height();
+
+        slideX = w / 2;
+        slideY = h / 2;
+
+        renderer.resize(w, h);
+    }
+
+    function findDotBySprite(sprite) {
+        var dot;
+        for (var i = 0; i < starCount; i++) {
+            dot = dots[i];
+            if (dot.sprite === sprite) {
+                return dot;
+            } 
+        }
+        return;
+    }
+
+    function update()
+    {
+        var dot;
+        for (var i = 0; i < starCount; i++)
+        {
+            s = dots[i];
+            //s.sprite.position.x = s.x + slideX;
+            //s.sprite.position.y = s.y + slideY;
+            //stars[i].x = stars[i].x * sx;
+            //stars[i].y = stars[i].y * sy;
+
+            s.sprite.position.x = xPos(s);
+            s.sprite.position.y = yPos(s);
+
+            s.a += s.r / maxRadius * 0.001;
+        }
+
+        renderer.render(stage);
+
+        drawLines(highlightedDots)
+
+        requestAnimFrame(update);
+    }
+
+
+    var lines;
+    function drawLines(highlightedDots) {
+        if (!lines) {
+            lines = new PIXI.Graphics();
+            stage.addChildAt(lines, 0);
+        }
+
+        lines.clear();
+
+        if (!highlightedDots)
+            return; 
+
+        var dotCount = highlightedDots.length;
+        var dot, line, i, j, cCount;
+        for (i=0; i < dotCount; i++) {
+            dot = dots[highlightedDots[i]];
+            cCount = dot.c.length;
+            for (j=0; j < cCount; j++) {
+                drawLine(lines, dot, dots[dot.c[j]]);
+            }
+        }
+    }
+
+    function drawLine(line, dotA, dotB) {
+        //var line = new PIXI.Graphics();
+        line.lineStyle(2, 0x111111, 1);
+        line.moveTo(xPos(dotA), yPos(dotA));
+        line.lineTo(xPos(dotB), yPos(dotB));
+        //lines.addChild(line);
+    }
+
+    function xPos(dot) {
+        return Math.sin(dot.a) * dot.r + slideX;
+    }
+
+    function yPos(dot) {
+        return Math.cos(dot.a) * dot.r + slideY;
+    }
+
+    function genConnections(index, maxCount) {
+        var maxConnections = 50;
+        var minConnections = 3;
+        var connectionCount = Math.floor(Math.random() * (maxConnections - minConnections) + minConnections);
+
+        var c = [];
+        var newC;
+        for (var i=0; i < connectionCount; i++) {
+            newC = Math.floor(Math.random() * maxCount);
+            if (newC == index) {
+                i--;
+            } else {
+                c.push(newC);
+            }
+        }
+        return c;
+    }
+    </script>
+</head>
+<body>
+</body>
+</html>

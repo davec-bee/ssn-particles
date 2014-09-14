@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <script src="js/jquery-1.8.3.min.js"></script>
+    <script src="js/pixi.js"></script>
+    <script src="js/vector.js"></script>
+    <script src="js/gravity.js"></script>
+    <script src="js/dat.gui.min.js"></script>
+    <style type="text/css">
+        body { margin: 0; padding: 0;}
+    </style>
+    <script type="text/javascript">
+
+    $(window).resize(resize)
+    window.onorientationchange = resize;
+
+    $(document).ready(function () {
+        initStage();
+        initParticles();
+    });
+
+    var w = 1024;
+    var h = 768;
+    var sx = 1.0 + (Math.random() / 20);
+    var sy = sx; //1.0 + (Math.random() / 20);
+    var slideX = w / 2;
+    var slideY = h / 2;
+    var dots = [];
+    var renderer;
+    var stage;
+
+    var interactive = true;
+
+    var colors = [0x20bdca, 0x38a59f, 0x5db290, 0x8e9656, 0xb5aa4b, 0xa47d37];
+
+    var highlightedDots;
+
+    var gravityPoint = new GravitySource(0, 0, 0.01, 4000);
+    var gravitySprite;
+    var drawV = false;
+    var vLines;
+
+    var wallBounds = false;
+
+    var controllers = [];
+
+    var stopped;
+
+    var props = {
+        particles: 100,
+        minRadius: 30,
+        maxRadius: 500
+    };
+
+    function stop() {
+        stopped = true;
+    }
+
+    function start() {
+        stopped = false;
+    }
+
+    function initStage() {
+        renderer = PIXI.autoDetectRenderer(w, h);
+        stage = new PIXI.Stage(0x000000, interactive);
+
+        document.body.appendChild(renderer.view);
+
+        var gui = new dat.GUI();
+        controllers.push(gui.add(props, 'particles', 0, 3000));
+        controllers.push(gui.add(props, 'minRadius', 0, 1000));
+        controllers.push(gui.add(props, 'maxRadius', 0, 1000));
+
+        for (var i=0; i < controllers.length; i++) {
+            controllers[i].onChange(function(value) {
+                stop();
+            });
+
+            controllers[i].onFinishChange(function(value) {
+                initParticles();
+                start();
+            });
+        }
+    };
+
+    function initParticles() {
+        //var p1 = new Particle(-w/2, -h/2+100, new Vector(0, 0));
+
+        if (stage.children.length > 1) { 
+            stage.removeChildren();
+        }
+        dots = [];
+
+        for (var i=0; i < props.particles; i++) {
+            var randomAngle = Math.random() * Math.PI * 2;
+            var randomRadius = Math.random() * (props.minRadius - props.maxRadius) + props.minRadius;
+            var multiplyPosition = 0.8;
+            var xPos = multiplyPosition * randomX * w - multiplyPosition * w / 2;
+            var yPos = multiplyPosition * randomY * h - multiplyPosition * h / 2;
+            var rotate = (Math.PI / 180) * 90;
+
+            var p1 = new Particle(xPos, yPos);
+            var plength = new Vector(xPos, yPos).length();
+            p1.addGravitySource(gravityPoint);
+            //var orbitV = gravityPoint.vector(p1).rotate(rotate);
+            var k = 2;
+            var orbitV = new Vector(k * xPos / plength, k * yPos / plength).rotate(rotate);
+            p1.addForce(orbitV);
+
+            var sprite = new PIXI.Graphics();
+            var size = 5;
+            var color = colors[Math.floor(Math.random() * colors.length)];
+            sprite.beginFill(color, 1);
+            sprite.drawCircle(0,0,size);
+            sprite.endFill;
+            sprite.position.x = 0;
+            sprite.position.y = 0;
+
+            var dot = {
+                particle: p1,
+                sprite: sprite
+            }
+
+            sprite.interactive = true;
+            sprite.hitArea = new PIXI.Rectangle(0,0,size,size);
+
+            dots.push(dot);
+
+            stage.addChild(sprite);
+        }
+
+        
+
+        //gravity
+        gravitySprite = new PIXI.Graphics();
+        gravitySprite.beginFill(0xffffff, 1);
+        gravitySprite.drawCircle(0,0,3);
+        gravitySprite.endFill;
+        gravitySprite.position.x = gravityPoint.x;
+        gravitySprite.position.y = gravityPoint.y;
+        stage.addChild(gravitySprite);
+
+        //velocity lines
+        vLines = new PIXI.Graphics();
+        vLines.lineStyle(1, 0xff0000, 1);
+        stage.addChildAt(vLines, 0);
+
+        resize();
+
+        requestAnimFrame(update);
+    }
+
+    function focusDot(event, dot) {
+        highlightedDots = [dot.i];
+
+        console.log('focusing on ' + dot.i);
+    }
+
+    function resize()
+    {
+        w = $(window).width();
+        h = $(window).height();
+
+        slideX = w / 2;
+        slideY = h / 2;
+
+        /*
+        gravityPoint.x = w / 2;
+        gravityPoint.y = h / 2;
+        */
+        gravitySprite.position.x = gravityPoint.x + slideX;
+        gravitySprite.position.y = gravityPoint.y + slideY;
+
+
+        renderer.resize(w, h);
+    }
+
+    function update()
+    {
+        if (stopped) {
+            return;
+        }
+
+        //vLines.clear();
+        var edgeDampening = 0.9;
+        var dot;
+        for (var i = 0; i < props.particles; i++)
+        {
+            d = dots[i];
+            d.particle.move();
+            var newX = d.particle.x + slideX;
+            var newY = d.particle.y + slideY;
+
+            if (wallBounds) {
+                if ((newX <= 0 && d.particle.v.x < 0)
+                    || (newX >= w && d.particle.v.x > 0)) {
+                    
+                    d.particle.addForce(new Vector(-2 * edgeDampening * d.particle.v.x, 0));
+                    newX = Math.max(0, Math.min(newX, w));
+                }
+
+                if ((newY <= 0 && d.particle.v.y < 0)
+                    || (newY >= h && d.particle.v.y > 0)) {
+
+                    d.particle.addForce(new Vector(0, -2 * edgeDampening * d.particle.v.y));
+                    newY = Math.max(0, Math.min(newY, h));
+                }
+            }
+
+            d.sprite.position.x = newX;
+            d.sprite.position.y = newY;
+
+            if (drawV) {
+                vLines.moveTo(d.sprite.position.x, d.sprite.position.y);
+                vLines.lineTo(d.sprite.position.x - d.particle.v.x, d.sprite.position.y - d.particle.v.y);
+            }
+        }
+
+        renderer.render(stage);
+
+        //drawLines(highlightedDots)
+
+        requestAnimFrame(update);
+    }
+
+    var lines;
+    function drawLines(highlightedDots) {
+        if (!lines) {
+            lines = new PIXI.Graphics();
+            stage.addChildAt(lines, 0);
+        }
+
+        lines.clear();
+
+        if (!highlightedDots)
+            return; 
+
+        var dotCount = highlightedDots.length;
+        var dot, line, i, j, cCount;
+        for (i=0; i < dotCount; i++) {
+            dot = dots[highlightedDots[i]];
+            cCount = dot.c.length;
+            for (j=0; j < cCount; j++) {
+                drawLine(lines, dot, dots[dot.c[j]]);
+            }
+        }
+    }
+
+    function drawLine(line, dotA, dotB) {
+        //var line = new PIXI.Graphics();
+        line.lineStyle(2, 0x111111, 1);
+        line.moveTo(xPos(dotA), yPos(dotA));
+        line.lineTo(xPos(dotB), yPos(dotB));
+        //lines.addChild(line);
+    }
+
+    function xPos(dot) {
+        return Math.sin(dot.a) * dot.r + slideX;
+    }
+
+    function yPos(dot) {
+        return Math.cos(dot.a) * dot.r + slideY;
+    }
+
+    function genConnections(index, maxCount) {
+        var maxConnections = 50;
+        var minConnections = 3;
+        var connectionCount = Math.floor(Math.random() * (maxConnections - minConnections) + minConnections);
+
+        var c = [];
+        var newC;
+        for (var i=0; i < connectionCount; i++) {
+            newC = Math.floor(Math.random() * maxCount);
+            if (newC == index) {
+                i--;
+            } else {
+                c.push(newC);
+            }
+        }
+        return c;
+    }
+    </script>
+</head>
+<body>
+</body>
+</html>
